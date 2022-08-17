@@ -12,8 +12,10 @@
 # permissions and limitations under the License.
 
 
+from distutils.command.clean import clean
 from typing import Dict, Optional, Tuple
 from collections.abc import Callable
+from ..utils.misc import clean_dict
 
 import numpy as np
 
@@ -24,7 +26,6 @@ from torch import nn
 import torch_optimizer as optim
 
 import pytorch_lightning as pl
-from torchmetrics import Accuracy, Precision, Recall, FBeta, ConfusionMatrix
 
 import ncad
 from ncad.ts import TimeSeriesDataset
@@ -36,7 +37,9 @@ from ncad.utils.donut_metrics import (
     adjust_predicts_donut,
     adjust_predicts_multiple_ts,
     best_f1_search_grid,
+    best_f1_search_grid1,
 )
+from ncad.utils import flatten
 
 
 class NCAD(pl.LightningModule):
@@ -130,9 +133,11 @@ class NCAD(pl.LightningModule):
         assert x.shape[-1] == self.hparams.window_length
 
         ts_whole_embedding = self.encoder(x)
-        ts_context_embedding = self.encoder(x[..., : -self.hparams.suspect_window_length])
+        ts_context_embedding = self.encoder(
+            x[..., : -self.hparams.suspect_window_length])
 
-        logits_anomaly = self.classifier(ts_whole_embedding, ts_context_embedding)
+        logits_anomaly = self.classifier(
+            ts_whole_embedding, ts_context_embedding)
 
         return logits_anomaly
 
@@ -174,7 +179,8 @@ class NCAD(pl.LightningModule):
         assert torch.isfinite(loss).item()
 
         # Logging loss
-        self.log("train_loss_step", loss, on_step=True, on_epoch=False, prog_bar=True, logger=True)
+        self.log("train_loss_step", loss, on_step=True,
+                 on_epoch=False, prog_bar=True, logger=True)
 
         return {"loss": loss}
 
@@ -205,7 +211,7 @@ class NCAD(pl.LightningModule):
 
     def on_validation_epoch_end(self):
         stage = "val"
-        ### Compute metrics and find "best" threshold
+        # Compute metrics and find "best" threshold
         score, target = self.val_metrics["cache_preds"].compute()
 
         # score, target into lists of 1-d np.ndarray
@@ -240,7 +246,8 @@ class NCAD(pl.LightningModule):
 
         # Log metrics
         for key, value in metrics_best.items():
-            self.log(f"{stage}_{key}", value, prog_bar=True if key == "f1" else False, logger=True)
+            self.log(f"{stage}_{key}", value, prog_bar=True if key ==
+                     "f1" else False, logger=True)
 
     def test_step(self, batch, batch_idx):
 
@@ -265,7 +272,7 @@ class NCAD(pl.LightningModule):
 
     def on_test_epoch_end(self):
         stage = "test"
-        ### Compute metrics and find "best" threshold
+        # Compute metrics and find "best" threshold
         score, target = self.test_metrics["cache_preds"].compute()
 
         # score, target into lists of 1-d np.ndarray
@@ -283,6 +290,16 @@ class NCAD(pl.LightningModule):
             target_np.append(target_i[0, :])
 
         # Criteria: best F1
+        metrics = best_f1_search_grid1(
+            score=score_np,
+            target=target_np,
+            adjust_predicts_fun=self.test_labels_adj_fun if self.hparams.test_labels_adj else None,
+            threshold_values=np.round(
+                np.arange(0.0, 1.0, self.hparams.threshold_grid_length_test), decimals=5
+            ),
+            # threshold_bounds = [0.01, 0.99],
+        )
+
         metrics_best, threshold_best = best_f1_search_grid(
             score=score_np,
             target=target_np,
@@ -295,12 +312,14 @@ class NCAD(pl.LightningModule):
 
         self.hparams.classifier_threshold = threshold_best
         self.log(
-            f"classifier_threshold", self.hparams.classifier_threshold, prog_bar=True, logger=True
+            "classifier_threshold", self.hparams.classifier_threshold, prog_bar=True, logger=True
         )
+        self.log_dict(clean_dict(metrics_best), prog_bar=True, logger=True)
 
         # Log metrics
-        for key, value in metrics_best.items():
-            self.log(f"{stage}_{key}", value, prog_bar=True if key == "f1" else False, logger=True)
+        # for key, value in metrics_best.items():
+        #     self.log(f"{stage}_{key}", value, prog_bar=True if key == "f1" else False, logger=True)
+        self.log_dict(clean_dict(metrics), prog_bar=True, logger=True)
 
     def configure_optimizers(self):
         # optim_class = optim.Adam
@@ -319,7 +338,6 @@ class NCAD(pl.LightningModule):
         *args,
         **kwargs,
     ) -> torch.Tensor:
-
         """Deploys the model over a tensor representing the time series
 
         Args:
@@ -339,7 +357,8 @@ class NCAD(pl.LightningModule):
 
         # Define functions for folding and unfolding the time series
         unfold_layer = nn.Unfold(
-            kernel_size=(ts_channels, self.hparams.window_length), stride=stride
+            kernel_size=(
+                ts_channels, self.hparams.window_length), stride=stride
         )
         fold_layer = nn.Fold(
             output_size=(1, T), kernel_size=(1, self.hparams.window_length), stride=stride
@@ -366,7 +385,8 @@ class NCAD(pl.LightningModule):
 
         with torch.no_grad():
             if self.hparams.max_windows_unfold_batch is None:
-                logits_anomaly = self(ts_windows.flatten(start_dim=0, end_dim=1))
+                logits_anomaly = self(
+                    ts_windows.flatten(start_dim=0, end_dim=1))
             else:
                 # For very long time series, it is neccesary to process the windows in smaller chunks
                 logits_anomaly = [
@@ -384,19 +404,21 @@ class NCAD(pl.LightningModule):
 
         # Repeat prediction for all timesteps in the suspect window, and reshape back before folding
         logits_anomaly = logits_anomaly.reshape(batch_size, num_windows, 1)
-        logits_anomaly = logits_anomaly.repeat(1, 1, self.hparams.window_length)
+        logits_anomaly = logits_anomaly.repeat(
+            1, 1, self.hparams.window_length)
         logits_anomaly[..., : -self.hparams.suspect_window_length] = np.nan
         logits_anomaly = logits_anomaly.transpose(1, 2)
 
-        assert logits_anomaly.shape == (batch_size, self.hparams.window_length, num_windows)
+        assert logits_anomaly.shape == (
+            batch_size, self.hparams.window_length, num_windows)
 
         # Function to squeeze dimensions 1 and 2 after folding
-        squeeze_fold = lambda x: x.squeeze(2).squeeze(1)
+        def squeeze_fold(x): return x.squeeze(2).squeeze(1)
 
         ### Count the number of predictions per timestep ###
         # Indicates entries in logits_anomaly with a valid prediction
         id_suspect = torch.zeros_like(logits_anomaly)
-        id_suspect[:, -self.hparams.suspect_window_length :] = 1.0
+        id_suspect[:, -self.hparams.suspect_window_length:] = 1.0
         num_pred = squeeze_fold(fold_layer(id_suspect))
 
         # Average of predicted probability of being anomalous for each timestep
@@ -405,12 +427,14 @@ class NCAD(pl.LightningModule):
         anomaly_probs_nanto0 = torch.where(
             id_suspect == 1, anomaly_probs, torch.zeros_like(anomaly_probs)
         )
-        anomaly_probs_avg = fold_layer(anomaly_probs_nanto0).squeeze(2).squeeze(1) / num_pred
+        anomaly_probs_avg = fold_layer(
+            anomaly_probs_nanto0).squeeze(2).squeeze(1) / num_pred
 
         assert anomaly_probs_avg.shape == (batch_size, T)
 
         # Majority vote
-        anomaly_votes = squeeze_fold(fold_layer(1.0 * (anomaly_probs > threshold_prob_vote)))
+        anomaly_votes = squeeze_fold(fold_layer(
+            1.0 * (anomaly_probs > threshold_prob_vote)))
         anomaly_vote = 1.0 * (anomaly_votes > (num_pred / 2))
 
         assert anomaly_vote.shape == (batch_size, T)
@@ -448,7 +472,8 @@ class NCAD(pl.LightningModule):
             # Stack all series and predict
             ts_torch = torch.stack(
                 [
-                    torch.tensor(ts.values.reshape(ts.shape), device=self.device)
+                    torch.tensor(ts.values.reshape(
+                        ts.shape), device=self.device)
                     for ts in ts_dataset
                 ],
                 dim=0,
@@ -469,7 +494,8 @@ class NCAD(pl.LightningModule):
             anomaly_probs_avg, anomaly_vote = [], []
             for i, ts in enumerate(ts_dataset_out):
                 ts_torch = (
-                    torch.tensor(ts.values, device=self.device).reshape(ts.shape).T.unsqueeze(0)
+                    torch.tensor(ts.values, device=self.device).reshape(
+                        ts.shape).T.unsqueeze(0)
                 )
                 if ts_torch.dim() == 2:
                     ts_torch.unsqueeze(1)

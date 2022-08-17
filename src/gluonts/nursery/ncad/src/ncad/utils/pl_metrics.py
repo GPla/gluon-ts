@@ -13,7 +13,7 @@
 
 import torch
 
-from pytorch_lightning.metrics import Metric
+from torchmetrics import Metric
 from pytorch_lightning.utilities import rank_zero_warn
 
 
@@ -30,7 +30,7 @@ class CachePredictions(Metric):
             " For large datasets this may lead to large memory footprint."
         )
 
-    def update(self, preds: torch.Tensor, target: torch.Tensor):
+    def update(self, preds: torch.Tensor, target: torch.Tensor, **kwargs):
         # preds, target = _input_format_classification(preds, target)
         assert preds.shape == target.shape
 

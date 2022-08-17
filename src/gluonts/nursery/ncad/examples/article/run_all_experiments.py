@@ -80,15 +80,15 @@ def main(
     sys.path.append(str(ncad_dir / "examples"))
 
     # Benchmark datasets to consider
-    benchmarks = ["kpi", "nasa", "smd", "swat", "yahoo"]
+    benchmarks = ["smd", "swat", "yahoo"]
     if not run_swat:
         benchmarks.remove("swat")
     if not run_yahoo:
         benchmarks.remove("yahoo")
 
-    # Import pipelines
+    # # Import pipelines
     for bmk in benchmarks:
-        exec(f"from {bmk} import {bmk}_pipeline")
+        exec(f"from ncad.{bmk} import {bmk}_pipeline")
 
     if download_data:
         yahoo_path = yahoo_path.expanduser()

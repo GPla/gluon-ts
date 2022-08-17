@@ -45,13 +45,18 @@ def binary_metrics(
     metrics["f1"] = sklearn.metrics.f1_score(y_true=target, y_pred=pred_label)
     if only_f1:
         return metrics["f1"]
-    metrics["f2"] = sklearn.metrics.fbeta_score(y_true=target, y_pred=pred_label, beta=2)
-    metrics["f0.5"] = sklearn.metrics.fbeta_score(y_true=target, y_pred=pred_label, beta=1 / 2)
-    metrics["precision"] = sklearn.metrics.precision_score(y_true=target, y_pred=pred_label)
+    metrics["f2"] = sklearn.metrics.fbeta_score(
+        y_true=target, y_pred=pred_label, beta=2)
+    metrics["f0.5"] = sklearn.metrics.fbeta_score(
+        y_true=target, y_pred=pred_label, beta=1 / 2)
+    metrics["precision"] = sklearn.metrics.precision_score(
+        y_true=target, y_pred=pred_label)
 
-    metrics["recall"] = sklearn.metrics.recall_score(y_true=target, y_pred=pred_label)
+    metrics["recall"] = sklearn.metrics.recall_score(
+        y_true=target, y_pred=pred_label)
 
-    conf_mat = sklearn.metrics.confusion_matrix(y_true=target, y_pred=pred_label)
+    conf_mat = sklearn.metrics.confusion_matrix(
+        y_true=target, y_pred=pred_label)
     if conf_mat.shape != (2, 2):
         TP = np.sum(pred_label * target)
         TN = np.sum((1 - pred_label) * (1 - target))
@@ -210,6 +215,68 @@ def binary_metrics_adj(
     return out
 
 
+def best_f1_search_grid1(
+    score: Union[np.array, List[np.array]],
+    target: Union[np.array, List[np.array]],
+    adjust_predicts_fun: Optional[Callable] = [None, adjust_predicts_donut, adjust_predicts_donut][
+        1
+    ],
+    threshold_values: np.array = [0.5],
+    verbose=False,
+    display_freq=1,
+) -> Tuple[Metrics, float]:
+    """Find the best-f1 metric along threshold_values.
+
+    Args:
+        score : Predicted (continuous) scores.
+            If 1D array, a vector of scores for a single time series.
+            If 2D array, a matrix of scores for multiple time series, of shape (time, batch)
+            If List, must contain elements of 1D vectors (possibly of different length)
+        target : True binary labels. Must share the same data structure and shape of score.
+        adjust_predicts_fun : Function for label adjustment on univariate time series.
+            By default (None) the search is performed with no label adjustment.
+            If specified, adjust_predicts_donut is currently supported.
+        threshold_values : threshold values used to evaluate the f1 metric.
+    Returns:
+        metrics : Dictionary with the binary metrics for the best threshold.
+        threshold : the `threshold` with the highest f1 (within the range of search).
+    """
+
+    # metrics_best = dict(f1=-1.0, precision=-1.0, recall=-1.0)
+    # threshold_best = None
+
+    threshold_values = np.array(threshold_values).copy()
+    threshold_values.sort()
+
+    metrics = {}
+    for i, threshold_i in enumerate(threshold_values):
+        metrics[str(threshold_i)] = binary_metrics_adj(
+            score=score,
+            target=target,
+            threshold=threshold_i,
+            adjust_predicts_fun=adjust_predicts_fun,
+            only_f1=False,
+        )
+
+    # i_best = np.argmax(f1_values)
+    # threshold_best = threshold_values[i_best]
+
+    # threshold_best_same_f1 = threshold_values[f1_values == f1_values[i_best]]
+    # if len(threshold_best_same_f1) > 1:
+    #     idx = np.argmin(np.abs(threshold_best_same_f1 - np.median(threshold_best_same_f1)))
+    #     threshold_best = threshold_best_same_f1[idx]
+
+    # metrics_best = binary_metrics_adj(
+    #     score=score,
+    #     target=target,
+    #     threshold=threshold_best,
+    #     adjust_predicts_fun=adjust_predicts_fun,
+    #     only_f1=False,
+    # )
+
+    return metrics
+
+
 def best_f1_search_grid(
     score: Union[np.array, List[np.array]],
     target: Union[np.array, List[np.array]],
@@ -221,7 +288,6 @@ def best_f1_search_grid(
     display_freq=1,
 ) -> Tuple[Metrics, float]:
     """Find the best-f1 metric along threshold_values.
-
     Args:
         score : Predicted (continuous) scores.
             If 1D array, a vector of scores for a single time series.
@@ -258,7 +324,8 @@ def best_f1_search_grid(
 
     threshold_best_same_f1 = threshold_values[f1_values == f1_values[i_best]]
     if len(threshold_best_same_f1) > 1:
-        idx = np.argmin(np.abs(threshold_best_same_f1 - np.median(threshold_best_same_f1)))
+        idx = np.argmin(np.abs(threshold_best_same_f1 -
+                        np.median(threshold_best_same_f1)))
         threshold_best = threshold_best_same_f1[idx]
 
     metrics_best = binary_metrics_adj(

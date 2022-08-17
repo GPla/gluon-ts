@@ -17,7 +17,10 @@ from .misc import (
     rm_file_or_dir,
     save_args,
     take_n_cycle,
+    flatten,
+    clean_dict
 )
+
 
 __all__ = [
     "clear_dir",
@@ -25,4 +28,6 @@ __all__ = [
     "rm_file_or_dir",
     "save_args",
     "take_n_cycle",
+    "flatten",
+    "clean_dict"
 ]

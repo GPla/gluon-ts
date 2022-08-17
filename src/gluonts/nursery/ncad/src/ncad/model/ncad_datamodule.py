@@ -60,7 +60,7 @@ class NCADDataModule(pl.LightningDataModule):
             stride_val_test=stride_val_test,
             num_workers=num_workers,
         )
-        self.hparams = hparams
+        self.save_hyperparameters(hparams, ignore=['distance'])
 
         self.datasets = {}
         assert (
@@ -78,7 +78,8 @@ class NCADDataModule(pl.LightningDataModule):
             assert (
                 not validation_ts_dataset.nan_ts_values
             ), "TimeSeries in validation_ts_dataset must not have nan values."
-            self.datasets["validation"] = TimeSeriesDatasetTorch(validation_ts_dataset)
+            self.datasets["validation"] = TimeSeriesDatasetTorch(
+                validation_ts_dataset)
 
         if test_ts_dataset is not None:
             assert (
@@ -136,7 +137,8 @@ class TimeSeriesDatasetTorch(Dataset):
             [
                 Lambda(lambda ts: [ts.values, ts.labels]),
                 Lambda(
-                    lambda vl: [np.expand_dims(vl[0], axis=1) if vl[0].ndim == 1 else vl[0], vl[1]]
+                    lambda vl: [np.expand_dims(
+                        vl[0], axis=1) if vl[0].ndim == 1 else vl[0], vl[1]]
                 ),  # Add ts channel dimension, if needed
                 Lambda(
                     lambda vl: [np.transpose(vl[0]), vl[1]]
@@ -199,7 +201,8 @@ class CroppedTimeSeriesDatasetTorch(Dataset):
         self.num_crops_per_series = int(num_crops_per_series)
 
         # Validate that all TimeSeries in ts_dataset are longer than window_length
-        ts_dataset_lengths = np.array([len(ts.values) for ts in self.ts_dataset])
+        ts_dataset_lengths = np.array(
+            [len(ts.values) for ts in self.ts_dataset])
         if any(ts_dataset_lengths < self.window_length):
             raise ValueError(
                 "All TimeSeries in 'ts_dataset' must be of length greater or equal to 'window_length'"
@@ -213,10 +216,12 @@ class CroppedTimeSeriesDatasetTorch(Dataset):
         self.transform = Compose(
             [
                 # Pick a random crop from the selected TimeSeries
-                Lambda(lambda x: self.cropping_fun(ts=x)),  # Output: List with cropped TimeSeries
+                # Output: List with cropped TimeSeries
+                Lambda(lambda x: self.cropping_fun(ts=x)),
                 Lambda(
                     lambda x: (
-                        np.stack([ts.values.reshape(ts.shape).T for ts in x], axis=0),
+                        np.stack(
+                            [ts.values.reshape(ts.shape).T for ts in x], axis=0),
                         np.stack([ts.labels for ts in x], axis=0),
                     )
                 ),  # output: tuple of two np.arrays (values, labels), with shapes (num_crops, N, T) and (num_crops, T)
@@ -288,11 +293,13 @@ def reduce_labels(
                 torch.sum(y_suspect, dim=1).bool().float()
             )  # Add to check if theres any 1 in each row
             y_suspect = torch.where(
-                torch.sum(y_nan, dim=1).bool(), torch.full_like(y_suspect, float("nan")), y_suspect
+                torch.sum(y_nan, dim=1).bool(), torch.full_like(
+                    y_suspect, float("nan")), y_suspect
             )  # put nan if all elements are nan
         else:
             y_suspect = torch.sum(y_suspect, dim=1).bool().float()
     else:
-        raise ValueError(f"reduction_method = {reduction_method} not supported.")
+        raise ValueError(
+            f"reduction_method = {reduction_method} not supported.")
 
     return y_suspect

@@ -16,12 +16,12 @@
     "normalize_embedding": true,
     "distance": "L2",
     "classifier_threshold": 0.5,
-    "threshold_grid_length_test": 0.01,
+    "threshold_grid_length_test": 0.1,
     "coe_rate": 1.5,
     "mixup_rate": 0.5,
     "learning_rate": 2e-5,
     "stride_roll_pred_val_test": 1,
-    "test_labels_adj": true,
+    "test_labels_adj": false,
     "max_windows_unfold_batch": 5000,
     "rnd_seed": 123
 }
